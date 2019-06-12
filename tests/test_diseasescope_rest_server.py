@@ -192,7 +192,7 @@ class TestDiseasescope(unittest.TestCase):
         self.assertEqual(rv.status_code, 202)
         res = rv.headers['Location']
         self.assertTrue(res is not None)
-        self.assertTrue(diseasescope_rest_server.SERVICE_NS in res)
+        self.assertTrue('http://' in res)
 
         uuidstr = re.sub('^.*/', '', res)
         diseasescope_rest_server.app.config[diseasescope_rest_server.JOB_PATH_KEY] = self._temp_dir

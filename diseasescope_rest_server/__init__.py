@@ -394,7 +394,7 @@ class RunDiseaseScope(Resource):
             res = create_task(params)
 
             resp = flask.make_response()
-            resp.headers[LOCATION] = SERVICE_NS + '/' + res
+            resp.headers[LOCATION] = res
             resp.status_code = 202
             return resp
         except OSError as ea:
