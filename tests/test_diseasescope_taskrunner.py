@@ -43,12 +43,10 @@ class TestDiseasescopetaskrunner(unittest.TestCase):
         task = FileBasedTask(None, None)
         self.assertEqual(task.get_task_uuid(), None)
         self.assertEqual(task.get_ipaddress(), None)
-        self.assertEqual(task.get_alpha(), None)
-        self.assertEqual(task.get_beta(), None)
+        self.assertEqual(task.get_diseaseid(), None)
         self.assertEqual(task.get_state(), None)
         self.assertEqual(task.get_taskdict(), None)
         self.assertEqual(task.get_taskdir(), None)
-        self.assertEqual(task.get_interactionfile(), None)
 
         self.assertEqual(task.get_task_summary_as_str(),
                          "{'basedir': None, 'state': None,"
@@ -59,27 +57,14 @@ class TestDiseasescopetaskrunner(unittest.TestCase):
         task.set_taskdir('/foo')
         self.assertEqual(task.get_taskdir(), '/foo')
 
-        task.set_taskdict({ diseasescope_rest_server.ALPHA_PARAM: None})
-        self.assertEqual(task.get_alpha(), None)
+        task.set_taskdict({ diseasescope_rest_server.DOID_PARAM: 1234})
+        self.assertEqual(task.get_diseaseid(), 1234)
 
         task.set_taskdict({})
-        self.assertEqual(task.get_alpha(), None)
+        self.assertEqual(task.get_diseaseid(), None)
 
-        temp_dir = tempfile.mkdtemp()
-        try:
-            task.set_taskdir(temp_dir)
-            thefile = os.path.join(temp_dir,
-                                   diseasescope_rest_server.INTERACTION_FILE_PARAM)
-            open(thefile, 'a').close()
-            self.assertEqual(task.get_interactionfile(), thefile)
-        finally:
-            shutil.rmtree(temp_dir)
-
-        task.set_taskdict({ diseasescope_rest_server.ALPHA_PARAM: 0.1,
-                           diseasescope_rest_server.BETA_PARAM: 1.2,
-                           })
-        self.assertEqual(task.get_alpha(), 0.1)
-        self.assertEqual(task.get_beta(), 1.2)
+        task.set_taskdict({ diseasescope_rest_server.DOID_PARAM: 2})
+        self.assertEqual(task.get_diseaseid(), 2)
 
     def test_filebasedtask_get_uuid_ip_state_basedir_from_path(self):
         # taskdir is none
@@ -253,9 +238,6 @@ class TestDiseasescopetaskrunner(unittest.TestCase):
             open(os.path.join(valid_dir, diseasescope_rest_server.RESULT), 'a').close()
             open(os.path.join(valid_dir, diseasescope_rest_server.TASK_JSON),
                  'a').close()
-            open(os.path.join(valid_dir,
-                              diseasescope_rest_server.INTERACTION_FILE_PARAM),
-                 'a').close()
 
             task = FileBasedTask(valid_dir, {})
             self.assertEqual(task.delete_task_files(), None)
@@ -269,9 +251,7 @@ class TestDiseasescopetaskrunner(unittest.TestCase):
             open(os.path.join(valid_dir, diseasescope_rest_server.RESULT), 'a').close()
             open(os.path.join(valid_dir, diseasescope_rest_server.TASK_JSON),
                  'a').close()
-            open(os.path.join(valid_dir,
-                              diseasescope_rest_server.INTERACTION_FILE_PARAM),
-                 'a').close()
+
             task = FileBasedTask(valid_dir, {})
             self.assertTrue('trying to remove ' in task.delete_task_files())
             self.assertTrue(os.path.isdir(valid_dir))

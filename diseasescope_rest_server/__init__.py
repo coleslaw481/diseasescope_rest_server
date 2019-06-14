@@ -23,7 +23,22 @@ from flask_limiter.util import get_remote_address
 
 desc = """DiseaseScope REST Server
 
-DiseaseScope
+DiseaseScope: Automatic Construction and Interpretation of Hierarchical Disease Models
+
+A service that automatically organizes high-throughput gene-gene 
+interaction data into interactive hierarchical models. This method 
+takes a disease name and returns biological information at multiple 
+scales including a core set of disease-associated genes, interactions 
+that form disease-relevant pathways and the hierarchical organization of 
+these pathways. Furthermore, to elucidate how each gene cluster is related 
+to the disease, DiseaseScope includes two interpretation tools: HiView Lens 
+to explore the underlying structure of individual modules by overlaying 
+additional networks and NetAnt to determine what biomedical concepts connect 
+the gene module to disease by proposing mechanistic pathways to pathogenesis. 
+Although the pipeline is automatic, each module is a self-contained service 
+that can be invoked independently, allowing users to form custom applications. 
+Together, DiseaseScope aggregates across massive amounts of biological 
+knowledge about diseases and organize the knowledge to guide discovery. 
 
  **NOTE:** This service is experimental. The interface is subject to change.
 
@@ -78,15 +93,13 @@ HIVIEWURL_KEY = 'hiviewurl'
 
 # key in result dictionary denoting input parameters
 PARAMETERS_KEY = 'parameters'
-INTERACTION_FILE_PARAM = 'interactionfile'
-ALPHA_PARAM = 'alpha'
-BETA_PARAM = 'beta'
 NDEXSERVER_PARAM = 'ndexserver'
 NDEXUSER_PARAM = 'ndexuser'
 NDEXPASS_PARAM = 'ndexpass'
 NDEXNAME_PARAM = 'ndexname'
 HIVIEWURL_PARAM = 'hiviewurl'
 
+DOID_PARAM = 'doid'
 
 api = Api(app, version=str(__version__),
           title='DiseaseScope REST Server',
@@ -167,7 +180,7 @@ def create_task(params):
     :return: string that is a uuid which denotes directory name
     """
     params['uuid'] = get_uuid()
-    params['tasktype'] = 'ddot_ontology'
+    params['tasktype'] = 'diseasescope_ontology'
     taskpath = os.path.join(get_submit_dir(), str(params[REMOTEIP_PARAM]),
                             str(params['uuid']))
     try:
@@ -175,18 +188,6 @@ def create_task(params):
         os.makedirs(taskpath, mode=0o775)
     finally:
         os.umask(original_umask)
-
-    app.logger.debug('interaction file param: ' +
-                     str(params[INTERACTION_FILE_PARAM]))
-    interfile_path = os.path.join(taskpath, INTERACTION_FILE_PARAM)
-    with open(interfile_path, 'wb') as f:
-        shutil.copyfileobj(params[INTERACTION_FILE_PARAM].stream, f)
-        f.flush()
-    os.chmod(interfile_path, mode=0o775)
-
-    params[INTERACTION_FILE_PARAM] = INTERACTION_FILE_PARAM
-    app.logger.debug(interfile_path + ' saved and it is ' +
-                     str(os.path.getsize(interfile_path)) + ' bytes')
 
     tmp_task_json = TASK_JSON + '.tmp'
     taskfilename = os.path.join(taskpath, tmp_task_json)
@@ -336,32 +337,20 @@ class RunDiseaseScope(Resource):
 
     post_parser = reqparse.RequestParser()
 
-    post_parser.add_argument(INTERACTION_FILE_PARAM, type=reqparse.FileStorage,
+    post_parser.add_argument(DOID_PARAM, type=int,
+                             help='Disease ID as number',
                              required=True,
-                             help='File with pairwise distances between '
-                                  'elements.  File should be 3 tab separated '
-                                  'columns with 1 undirected edge per line '
-                                  'of the format node1, node2, edgeWeight '
-                                  '(similarity between node1 and node2)\n\n'
-                                  'Example file:\n\n ```Bash\nARL2BP  DDAH1 '
-                                  '  0.5101\nARL2BP  REPS1   0.6277\n```\n',
-                             location='files')
-    post_parser.add_argument(ALPHA_PARAM, type=float, default=0.05,
-                             help='Threshold between clusters',
                              location='form')
-    post_parser.add_argument(BETA_PARAM, type=float, default=0.5,
-                             help='Merge density for overlapping clusters',
-                             location='form')
-    post_parser.add_argument(NDEXNAME_PARAM, default='DDOTontology',
+    post_parser.add_argument(NDEXNAME_PARAM, default='DiseaseScopeOntology',
                              help='Name to use for network stored in NDEx',
                              location='form')
     post_parser.add_argument(NDEXSERVER_PARAM, default='test.ndexbio.org',
                              help='NDEx server to use',
                              location='form')
-    post_parser.add_argument(NDEXUSER_PARAM, default='ddot_anon',
+    post_parser.add_argument(NDEXUSER_PARAM, default='diseasescope_anon',
                              help='NDEx username',
                              location='form')
-    post_parser.add_argument(NDEXPASS_PARAM, default='ddot_anon',
+    post_parser.add_argument(NDEXPASS_PARAM, default='diseasescope_anon',
                              help='NDEx password',
                              location='form')
     post_parser.add_argument(HIVIEWURL_PARAM,

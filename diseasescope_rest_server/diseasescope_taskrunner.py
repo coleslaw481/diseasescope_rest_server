@@ -52,8 +52,7 @@ class FileBasedTask(object):
     IPADDR = 'ipaddr'
     UUID = 'uuid'
     TASK_FILES = [diseasescope_rest_server.RESULT,
-                  diseasescope_rest_server.TASK_JSON,
-                  diseasescope_rest_server.INTERACTION_FILE_PARAM]
+                  diseasescope_rest_server.TASK_JSON]
 
     def __init__(self, taskdir, taskdict):
         self._taskdir = taskdir
@@ -256,42 +255,17 @@ class FileBasedTask(object):
         """
         return self._taskdict
 
-    def get_alpha(self):
+    def get_diseaseid(self):
         """
         Gets alpha parameter
         :return: alpha parameter or None
         """
         if self._taskdict is None:
             return None
-        if diseasescope_rest_server.ALPHA_PARAM not in self._taskdict:
+        if diseasescope_rest_server.DOID_PARAM not in self._taskdict:
             return None
-        res = self._taskdict[diseasescope_rest_server.ALPHA_PARAM]
+        res = self._taskdict[diseasescope_rest_server.DOID_PARAM]
         return res
-
-    def get_beta(self):
-        """
-        Gets beta parameter
-        :return: beta parameter or None
-        """
-        if self._taskdict is None:
-            return None
-        if diseasescope_rest_server.BETA_PARAM not in self._taskdict:
-            return None
-        res = self._taskdict[diseasescope_rest_server.BETA_PARAM]
-        return res
-
-    def get_interactionfile(self):
-        """
-        Gets snp level summary file path
-        :return:
-        """
-        if self._taskdir is None:
-            return None
-        snp_file = os.path.join(self._taskdir,
-                                diseasescope_rest_server.INTERACTION_FILE_PARAM)
-        if not os.path.isfile(snp_file):
-            return None
-        return snp_file
 
     def get_tmp_resultpath(self):
         """

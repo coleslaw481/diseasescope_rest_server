@@ -56,28 +56,15 @@ class TestDiseasescope(unittest.TestCase):
     def test_create_task_success(self):
         pdict = {}
         pdict['remoteip'] = '1.2.3.4'
-        pdict[diseasescope_rest_server.ALPHA_PARAM] = 0.01
-        pdict[diseasescope_rest_server.BETA_PARAM] = 0.5
-        intfile = FileStorage(stream=io.BytesIO(b'hi there'),
-                              filename='yo.txt')
-        pdict[diseasescope_rest_server.INTERACTION_FILE_PARAM] = intfile
+        pdict[diseasescope_rest_server.DOID_PARAM] = 1234
         res = diseasescope_rest_server.create_task(pdict)
         self.assertTrue(res is not None)
-
-        snp_path = os.path.join(diseasescope_rest_server.get_submit_dir(),
-                                pdict['remoteip'], res,
-                                diseasescope_rest_server.INTERACTION_FILE_PARAM)
-        self.assertTrue(os.path.isfile(snp_path))
 
     def test_create_task_submitdir_is_a_file(self):
         open(diseasescope_rest_server.get_submit_dir(), 'a').close()
         pdict = {}
         pdict['remoteip'] = '1.2.3.4'
-        pdict[diseasescope_rest_server.ALPHA_PARAM] = 0.01
-        pdict[diseasescope_rest_server.BETA_PARAM] = 0.5
-        intfile = FileStorage(stream=io.BytesIO(b'hi there'),
-                              filename='yo.txt')
-        pdict[diseasescope_rest_server.INTERACTION_FILE_PARAM] = intfile
+        pdict[diseasescope_rest_server.DOID_PARAM] = 1234
         try:
             diseasescope_rest_server.create_task(pdict)
             self.fail('Expected NotADirectoryError')
@@ -159,21 +146,17 @@ class TestDiseasescope(unittest.TestCase):
         
     def test_post_missing_required_parameter(self):
         pdict = {}
-        pdict[diseasescope_rest_server.ALPHA_PARAM] = 0.4,
         rv = self._app.post(diseasescope_rest_server.SERVICE_NS +
                             '/', data=pdict,
                             follow_redirects=True)
-        self.assertTrue('interactionfile' in rv.json['errors'])
+        self.assertTrue('doid' in rv.json['errors'])
 
         self.assertEqual(rv.status_code, 400)
 
     def test_post_create_task_fails(self):
         open(diseasescope_rest_server.get_submit_dir(), 'a').close()
         pdict = {}
-        pdict[diseasescope_rest_server.ALPHA_PARAM] = 0.5
-        pdict[diseasescope_rest_server.BETA_PARAM] = 1.0
-        pdict[diseasescope_rest_server.INTERACTION_FILE_PARAM] = (io.BytesIO(b'hi there'),
-                                                      'yo.txt')
+        pdict[diseasescope_rest_server.DOID_PARAM] = 1234
         rv = self._app.post(diseasescope_rest_server.SERVICE_NS,
                             data=pdict,
                             follow_redirects=True)
@@ -182,10 +165,7 @@ class TestDiseasescope(unittest.TestCase):
 
     def test_post_ndex(self):
         pdict = {}
-        pdict[diseasescope_rest_server.ALPHA_PARAM] = 0.5
-        pdict[diseasescope_rest_server.BETA_PARAM] = 1.0
-        pdict[diseasescope_rest_server.INTERACTION_FILE_PARAM] = (io.BytesIO(b'hi there'),
-                                                      'yo.txt')
+        pdict[diseasescope_rest_server.DOID_PARAM] = 1234
         rv = self._app.post(diseasescope_rest_server.SERVICE_NS,
                             data=pdict,
                             follow_redirects=True)
@@ -201,15 +181,12 @@ class TestDiseasescope(unittest.TestCase):
                                      basedir=diseasescope_rest_server.get_submit_dir())
         self.assertTrue(os.path.isdir(tpath))
         jsonfile = os.path.join(tpath, diseasescope_rest_server.TASK_JSON)
-        ifile = os.path.join(tpath, diseasescope_rest_server.INTERACTION_FILE_PARAM)
-        self.assertTrue(os.path.isfile(ifile))
         self.assertTrue(os.path.isfile(jsonfile))
         with open(jsonfile, 'r') as f:
             jdata = json.load(f)
 
-        self.assertEqual(jdata['tasktype'], 'ddot_ontology')
-        self.assertEqual(jdata[diseasescope_rest_server.ALPHA_PARAM], 0.5)
-        self.assertEqual(jdata[diseasescope_rest_server.BETA_PARAM], 1.0)
+        self.assertEqual(jdata['tasktype'], 'diseasescope_ontology')
+        self.assertEqual(jdata[diseasescope_rest_server.DOID_PARAM], 1234)
 
     def test_get_status_no_submidir(self):
         rv = self._app.get(diseasescope_rest_server.SERVICE_NS + '/status')
