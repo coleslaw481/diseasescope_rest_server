@@ -13,6 +13,7 @@ import json
 import shutil
 import time
 import copy
+import random
 import flask
 
 from flask import Flask, jsonify, request
@@ -22,6 +23,8 @@ from flask_limiter.util import get_remote_address
 
 
 desc = """DiseaseScope REST Server
+
+**THIS IS A FAKE VERSION THAT RETURNS RANDOM RESULTS**
 
 DiseaseScope: Automatic Construction and Interpretation of Hierarchical Disease Models
 
@@ -391,18 +394,16 @@ class RunDiseaseScope(Resource):
         app.logger.debug("Post received")
 
         try:
-            thereq = request.json
-            thereq['remoteip'] = request.remote_addr
-            res = create_task(thereq)
+            if random.choice(['success', 'success', 'success',
+                              'success', 'success', 'fail']) is 'fail':
+                raise Exception('something failed')
 
-            resp = flask.make_response()
-            resp.headers[LOCATION] = res
-            resp.status_code = 202
             task = TaskResponse()
-            task.id = res
+            task.id = str(uuid.uuid4())
+            res = task.id
             return marshal(task, RunDiseaseScope.taskres_obj), 202,\
                    {LOCATION: res}
-        except OSError as ea:
+        except Exception as ea:
             app.logger.exception('Error creating task due to Exception ' +
                                  str(ea))
             er = ErrorResponse()
@@ -412,7 +413,7 @@ class RunDiseaseScope(Resource):
 
 
 @ns.route('/<string:id>', strict_slashes=False)
-class GetQueryResult(Resource):
+class GetDiseaseScopeResult(Resource):
     """More class doc here"""
 
     param_respobj = api.model('ParametersSchema', {
@@ -527,33 +528,25 @@ class GetQueryResult(Resource):
         """
         Deletes task associated with {id} passed in
         """
-        resp = flask.make_response()
-        try:
-            req_dir = get_delete_request_dir()
-            if not os.path.isdir(req_dir):
-                app.logger.debug('Creating directory: ' + req_dir)
-                try:
-                    original_umask = os.umask(0)
-                    os.makedirs(req_dir, mode=0o775)
-                finally:
-                    os.umask(original_umask)
-            cleanid = id.strip()
-            if len(cleanid) > 40 or len(cleanid) == 0:
-                er = ErrorResponse()
-                er.message = 'Invalid id'
-                er.description = 'id is empty or greater then 40 chars'
-                return marshal(er, ERROR_RESP), 400
-
-            with open(os.path.join(req_dir, cleanid), 'w') as f:
-                f.write(request.remote_addr)
-                f.flush()
-            resp.status_code = 200
+        s = random.choice([200, 200,
+                           200, 200,
+                           200, 200,
+                           400, 400,
+                           500])
+        if s is 200:
+            resp = flask.make_response()
+            resp.status_code = s
             return resp
-        except Exception as e:
-            er = ErrorResponse()
-            er.message = 'Caught exception'
-            er.description = str(e)
-            return marshal(er, ERROR_RESP), 500
+
+        er = ErrorResponse()
+        if s is 400:
+            er.message = 'Invalid request somehow'
+            er.description = 'hi'
+        if s is 500:
+            er.message = 'some server error'
+            er.description = 'hi there'
+
+        return marshal(er, ERROR_RESP), s
 
 
 class ServerStatus(object):
@@ -565,24 +558,18 @@ class ServerStatus(object):
 
         self.status = 'ok'
         self.message = ''
-        self.pcDiskFull = 0
+        self.pcdiskfull = 0
         self.load = [0, 0, 0]
-        self.restVersion = __version__
+        self.queries = [0, 0, 0, 0, 0]
+        self.rest_version = __version__
 
-        self.pcDiskFull = -1
-        try:
-            s = os.statvfs(get_submit_dir())
-            self.pcDiskFull = int(float(s.f_blocks - s.f_bavail) /
-                                  float(s.f_blocks) * 100)
-        except Exception:
-            app.logger.exception('Caught exception checking disk space')
-            self.pcDiskFull = -1
-
-        if self.pcDiskFull >= 90:
+        self.pcdiskfull = random.randint(0, 100)
+        if self.pcdiskfull is 100:
             self.status = 'error'
             self.message = 'Disk is full'
         else:
-            self.status = 'ok'
+            self.status = random.choice(['ok', 'error'])
+
         loadavg = os.getloadavg()
 
         self.load[0] = loadavg[0]
