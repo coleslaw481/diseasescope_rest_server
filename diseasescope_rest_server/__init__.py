@@ -357,13 +357,10 @@ class RunDiseaseScope(Resource):
             thereq['remoteip'] = request.remote_addr
             res = create_task(thereq)
 
-            resp = flask.make_response()
-            resp.headers[LOCATION] = res
-            resp.status_code = 202
             task = TaskResponse()
             task.id = res
             return (marshal(task, RunDiseaseScope.taskres_obj), 202,
-                    {LOCATION: res})
+                    {LOCATION: SERVICE_NS + '/' + res})
         except OSError as ea:
             app.logger.exception('Error creating task due to OSError ' +
                                  str(ea))
