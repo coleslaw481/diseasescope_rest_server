@@ -13,6 +13,7 @@ import uuid
 import re
 from werkzeug.datastructures import FileStorage
 import diseasescope_rest_server
+from diseasescope_rest_server import dao
 from diseasescope_rest_server import ErrorResponse
 
 
@@ -42,21 +43,21 @@ class TestDiseasescope(unittest.TestCase):
         self.assertTrue(er.timeStamp is not None)
 
     def test_get_submit_dir(self):
-        spath = os.path.join(self._temp_dir, diseasescope_rest_server.SUBMITTED_STATUS)
+        spath = os.path.join(self._temp_dir, dao.SUBMITTED_STATUS)
         self.assertEqual(diseasescope_rest_server.get_submit_dir(), spath)
 
     def test_get_processing_dir(self):
-        spath = os.path.join(self._temp_dir, diseasescope_rest_server.PROCESSING_STATUS)
+        spath = os.path.join(self._temp_dir, dao.PROCESSING_STATUS)
         self.assertEqual(diseasescope_rest_server.get_processing_dir(), spath)
 
     def test_get_done_dir(self):
-        spath = os.path.join(self._temp_dir, diseasescope_rest_server.DONE_STATUS)
+        spath = os.path.join(self._temp_dir, dao.DONE_STATUS)
         self.assertEqual(diseasescope_rest_server.get_done_dir(), spath)
 
     def test_create_task_success(self):
         pdict = {}
         pdict['remoteip'] = '1.2.3.4'
-        pdict[diseasescope_rest_server.DOID_PARAM] = 1234
+        pdict[dao.DOID_PARAM] = 1234
         res = diseasescope_rest_server.create_task(pdict)
         self.assertTrue(res is not None)
 
@@ -64,7 +65,7 @@ class TestDiseasescope(unittest.TestCase):
         open(diseasescope_rest_server.get_submit_dir(), 'a').close()
         pdict = {}
         pdict['remoteip'] = '1.2.3.4'
-        pdict[diseasescope_rest_server.DOID_PARAM] = 1234
+        pdict[dao.DOID_PARAM] = 1234
         try:
             diseasescope_rest_server.create_task(pdict)
             self.fail('Expected NotADirectoryError')
@@ -99,17 +100,6 @@ class TestDiseasescope(unittest.TestCase):
                                               basedir=self._temp_dir),
                          theuuid_dir)
 
-    def test_wait_for_task_uuid_none(self):
-        self.assertEqual(diseasescope_rest_server.wait_for_task(None), None)
-
-    def test_wait_for_task_uuid_not_found(self):
-        self.assertEqual(diseasescope_rest_server.wait_for_task('foo'), None)
-
-    def test_wait_for_task_uuid_found(self):
-        taskdir = os.path.join(self._temp_dir, 'done', '1.2.3.4', 'haha')
-        os.makedirs(taskdir, mode=0o755)
-        self.assertEqual(diseasescope_rest_server.wait_for_task('haha'), taskdir)
-
     def test_baseurl(self):
         """Test something."""
         rv = self._app.get('/')
@@ -122,7 +112,7 @@ class TestDiseasescope(unittest.TestCase):
 
         self.assertEqual(rv.status_code, 200)
         hehefile = os.path.join(self._temp_dir,
-                                diseasescope_rest_server.DELETE_REQUESTS,
+                                dao.DELETE_REQUESTS,
                                 'hehex')
         self.assertTrue(os.path.isfile(hehefile))
 
@@ -137,37 +127,43 @@ class TestDiseasescope(unittest.TestCase):
 
         # try where we get os error
         xdir = os.path.join(self._temp_dir,
-                            diseasescope_rest_server.DELETE_REQUESTS,
+                            dao.DELETE_REQUESTS,
                             'hehe')
         os.makedirs(xdir, mode=0o755)
         rv = self._app.delete(diseasescope_rest_server.SERVICE_NS +
                               '/hehe')
         self.assertEqual(rv.status_code, 500)
-        
+
+    def test_post_missing_any_json(self):
+        rv = self._app.post(diseasescope_rest_server.SERVICE_NS +
+                            '/',
+                            follow_redirects=True)
+        self.assertEqual(rv.status_code, 400)
+        self.assertTrue('Expected json' in rv.json['description'])
+
     def test_post_missing_required_parameter(self):
         pdict = {}
         rv = self._app.post(diseasescope_rest_server.SERVICE_NS +
-                            '/', data=pdict,
+                            '/', json=pdict,
                             follow_redirects=True)
-        self.assertTrue('doid' in rv.json['errors'])
-
         self.assertEqual(rv.status_code, 400)
+        self.assertTrue('doid parameter' in rv.json['description'])
 
     def test_post_create_task_fails(self):
         open(diseasescope_rest_server.get_submit_dir(), 'a').close()
         pdict = {}
-        pdict[diseasescope_rest_server.DOID_PARAM] = 1234
+        pdict[dao.DOID_PARAM] = 1234
         rv = self._app.post(diseasescope_rest_server.SERVICE_NS,
-                            data=pdict,
+                            json=pdict,
                             follow_redirects=True)
         self.assertEqual(rv.status_code, 500)
         self.assertTrue('Error' in rv.json['message'])
 
     def test_post_ndex(self):
         pdict = {}
-        pdict[diseasescope_rest_server.DOID_PARAM] = 1234
+        pdict[dao.DOID_PARAM] = 1234
         rv = self._app.post(diseasescope_rest_server.SERVICE_NS,
-                            data=pdict,
+                            json=pdict,
                             follow_redirects=True)
         self.assertEqual(rv.status_code, 202)
         res = rv.headers['Location']
@@ -180,13 +176,13 @@ class TestDiseasescope(unittest.TestCase):
         tpath = diseasescope_rest_server.get_task(uuidstr,
                                      basedir=diseasescope_rest_server.get_submit_dir())
         self.assertTrue(os.path.isdir(tpath))
-        jsonfile = os.path.join(tpath, diseasescope_rest_server.TASK_JSON)
+        jsonfile = os.path.join(tpath, dao.TASK_JSON)
         self.assertTrue(os.path.isfile(jsonfile))
         with open(jsonfile, 'r') as f:
             jdata = json.load(f)
 
         self.assertEqual(jdata['tasktype'], 'diseasescope_ontology')
-        self.assertEqual(jdata[diseasescope_rest_server.DOID_PARAM], 1234)
+        self.assertEqual(jdata[dao.DOID_PARAM], 1234)
 
     def test_get_status_no_submidir(self):
         rv = self._app.get(diseasescope_rest_server.SERVICE_NS + '/status')
@@ -216,79 +212,88 @@ class TestDiseasescope(unittest.TestCase):
 
     def test_get_id_not_found(self):
         done_dir = os.path.join(self._temp_dir,
-                                diseasescope_rest_server.DONE_STATUS)
+                                dao.DONE_STATUS)
         os.makedirs(done_dir, mode=0o755)
         rv = self._app.get(diseasescope_rest_server.SERVICE_NS +
                            '/1234')
-        data = json.loads(rv.data)
-        self.assertEqual(data[diseasescope_rest_server.STATUS_RESULT_KEY],
-                         diseasescope_rest_server.NOTFOUND_STATUS)
         self.assertEqual(rv.status_code, 410)
 
     def test_get_id_found_in_submitted_status(self):
         task_dir = os.path.join(self._temp_dir,
-                                diseasescope_rest_server.SUBMITTED_STATUS,
+                                dao.SUBMITTED_STATUS,
                                 '45.67.54.33', 'qazxsw')
         os.makedirs(task_dir, mode=0o755)
+        resfile = os.path.join(task_dir, dao.RESULT)
+        with open(resfile, 'w') as f:
+            f.write('{ "hello": "there", "status": "' +
+                    dao.SUBMITTED_STATUS + '"}')
+            f.flush()
+        tfile = os.path.join(task_dir, dao.TASK_JSON)
+        with open(tfile, 'w') as f:
+            f.write('{"task": "yo"}')
+            f.flush()
         rv = self._app.get(diseasescope_rest_server.SERVICE_NS +
                            '/qazxsw')
         data = json.loads(rv.data)
-        self.assertEqual(data[diseasescope_rest_server.STATUS_RESULT_KEY],
-                         diseasescope_rest_server.SUBMITTED_STATUS)
+        self.assertEqual(data[dao.STATUS_RESULT_KEY],
+                         dao.SUBMITTED_STATUS)
         self.assertEqual(rv.status_code, 200)
 
     def test_get_id_found_in_processing_status(self):
         task_dir = os.path.join(self._temp_dir,
-                                diseasescope_rest_server.PROCESSING_STATUS,
+                                dao.PROCESSING_STATUS,
                                 '45.67.54.33', 'qazxsw')
         os.makedirs(task_dir, mode=0o755)
         rv = self._app.get(diseasescope_rest_server.SERVICE_NS +
                            '/qazxsw')
         data = json.loads(rv.data)
-        self.assertEqual(data[diseasescope_rest_server.STATUS_RESULT_KEY],
-                         diseasescope_rest_server.PROCESSING_STATUS)
-        self.assertEqual(rv.status_code, 200)
+        self.assertEqual('No task.json file found', data['message'])
+        self.assertEqual(rv.status_code, 500)
 
     def test_get_id_found_in_done_status_no_result_file(self):
         task_dir = os.path.join(self._temp_dir,
-                                diseasescope_rest_server.DONE_STATUS,
+                                dao.DONE_STATUS,
                                 '45.67.54.33', 'qazxsw')
         os.makedirs(task_dir, mode=0o755)
+
+        tfile = os.path.join(task_dir, dao.TASK_JSON)
+        with open(tfile, 'w') as f:
+            f.write('{"task": "yo"}')
+            f.flush()
         rv = self._app.get(diseasescope_rest_server.SERVICE_NS +
                            '/qazxsw')
         data = json.loads(rv.data)
-        self.assertEqual(data['message'],
-                         'No result found')
-        self.assertEqual(rv.status_code, 500)
+        self.assertEqual('yo', data['task'])
+        self.assertEqual(rv.status_code, 200)
 
     def test_get_id_found_in_done_status_with_result_file_no_task_file(self):
         task_dir = os.path.join(self._temp_dir,
-                                diseasescope_rest_server.DONE_STATUS,
+                                dao.DONE_STATUS,
                                 '45.67.54.33', 'qazxsw')
         os.makedirs(task_dir, mode=0o755)
-        resfile = os.path.join(task_dir, diseasescope_rest_server.RESULT)
+        resfile = os.path.join(task_dir, dao.RESULT)
         with open(resfile, 'w') as f:
-            f.write('{ "hello": "there"}')
+            f.write('{ "hello": "there", "status": "done"}')
             f.flush()
 
         rv = self._app.get(diseasescope_rest_server.SERVICE_NS +
                            '/qazxsw')
         data = json.loads(rv.data)
-        self.assertEqual(data[diseasescope_rest_server.STATUS_RESULT_KEY],
-                         diseasescope_rest_server.DONE_STATUS)
-        self.assertEqual(data[diseasescope_rest_server.RESULT_KEY]['hello'], 'there')
+        self.assertEqual(data[dao.STATUS_RESULT_KEY],
+                         dao.DONE_STATUS)
+        self.assertEqual(data['hello'], 'there')
         self.assertEqual(rv.status_code, 200)
 
     def test_get_id_found_in_done_status_with_result_file_with_task_file(self):
         task_dir = os.path.join(self._temp_dir,
-                                diseasescope_rest_server.DONE_STATUS,
+                                dao.DONE_STATUS,
                                 '45.67.54.33', 'qazxsw')
         os.makedirs(task_dir, mode=0o755)
-        resfile = os.path.join(task_dir, diseasescope_rest_server.RESULT)
+        resfile = os.path.join(task_dir, dao.RESULT)
         with open(resfile, 'w') as f:
-            f.write('{ "hello": "there"}')
+            f.write('{ "hello": "there", "status": "done"}')
             f.flush()
-        tfile = os.path.join(task_dir, diseasescope_rest_server.TASK_JSON)
+        tfile = os.path.join(task_dir, dao.TASK_JSON)
         with open(tfile, 'w') as f:
             f.write('{"task": "yo"}')
             f.flush()
@@ -296,9 +301,9 @@ class TestDiseasescope(unittest.TestCase):
         rv = self._app.get(diseasescope_rest_server.SERVICE_NS +
                            '/qazxsw')
         data = json.loads(rv.data)
-        self.assertEqual(data[diseasescope_rest_server.STATUS_RESULT_KEY],
-                         diseasescope_rest_server.DONE_STATUS)
-        self.assertEqual(data[diseasescope_rest_server.RESULT_KEY]['hello'], 'there')
+        self.assertEqual(data[dao.STATUS_RESULT_KEY],
+                         dao.DONE_STATUS)
+        self.assertEqual(data['hello'], 'there')
         self.assertEqual(rv.status_code, 200)
 
     def test_log_task_json_file_with_none(self):

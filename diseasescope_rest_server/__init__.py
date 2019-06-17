@@ -16,10 +16,11 @@ import copy
 import flask
 
 from flask import Flask, jsonify, request
-from flask_restplus import reqparse, Api, Resource, fields, marshal
+from flask_restplus import Api, Resource, fields, marshal
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
+from diseasescope_rest_server import dao
 
 desc = """DiseaseScope REST Server
 
@@ -57,47 +58,11 @@ app.config.from_envvar(DISEASESCOPE_REST_SETTINGS_ENV, silent=True)
 app.logger.info('Job Path dir: ' + app.config[JOB_PATH_KEY])
 SERVICE_NS = 'diseasescope'
 
-TASK_JSON = 'task.json'
 LOCATION = 'Location'
-TMP_RESULT = 'result.tmp'
-RESULT = 'result.json'
 
 ERROR_PARAM = 'error'
 REMOTEIP_PARAM = 'remoteip'
 
-
-STATUS_RESULT_KEY = 'status'
-NOTFOUND_STATUS = 'notfound'
-UNKNOWN_STATUS = 'unknown'
-SUBMITTED_STATUS = 'submitted'
-PROCESSING_STATUS = 'processing'
-DONE_STATUS = 'done'
-ERROR_STATUS = 'error'
-
-STATUS_LIST = [UNKNOWN_STATUS, SUBMITTED_STATUS,
-               PROCESSING_STATUS, ERROR_STATUS,
-               DONE_STATUS]
-
-# directory where token files named after tasks to delete
-# are stored
-DELETE_REQUESTS = 'delete_requests'
-
-# key in result dictionary denoting the
-# result data
-RESULT_KEY = 'result'
-NDEXURL_KEY = 'ndexurl'
-HIVIEWURL_KEY = 'hiviewurl'
-
-# key in result dictionary denoting input parameters
-PARAMETERS_KEY = 'parameters'
-NDEXSERVER_PARAM = 'ndexserver'
-NDEXUSER_PARAM = 'ndexuser'
-NDEXPASS_PARAM = 'ndexpass'
-NDEXNAME_PARAM = 'ndexname'
-HIVIEWURL_PARAM = 'hiviewurl'
-
-DOID_PARAM = 'doid'
-TISSUE_PARAM = 'tissue'
 
 api = Api(app, version=str(__version__),
           title='DiseaseScope REST Server',
@@ -139,7 +104,7 @@ def get_submit_dir():
     Gets base directory where submitted jobs will be placed
     :return:
     """
-    return os.path.join(app.config[JOB_PATH_KEY], SUBMITTED_STATUS)
+    return os.path.join(app.config[JOB_PATH_KEY], dao.SUBMITTED_STATUS)
 
 
 def get_processing_dir():
@@ -147,7 +112,7 @@ def get_processing_dir():
         Gets base directory where processing jobs will be placed
     :return:
     """
-    return os.path.join(app.config[JOB_PATH_KEY], PROCESSING_STATUS)
+    return os.path.join(app.config[JOB_PATH_KEY], dao.PROCESSING_STATUS)
 
 
 def get_done_dir():
@@ -156,7 +121,7 @@ def get_done_dir():
 
     :return:
     """
-    return os.path.join(app.config[JOB_PATH_KEY], DONE_STATUS)
+    return os.path.join(app.config[JOB_PATH_KEY], dao.DONE_STATUS)
 
 
 def get_delete_request_dir():
@@ -164,8 +129,16 @@ def get_delete_request_dir():
     Gets base directory where delete request token files will be placed
     :return:
     """
-    return os.path.join(app.config[JOB_PATH_KEY], DELETE_REQUESTS)
+    return os.path.join(app.config[JOB_PATH_KEY], dao.DELETE_REQUESTS)
 
+def milliseconds_since_epoch(curtime):
+    """
+
+    :return:
+    """
+    dt = curtime - datetime(1970, 1, 1)
+    ms = int((dt.days * 24 * 60 * 60 + dt.seconds) * 1000 + dt.microseconds / 1000.0)
+    return ms
 
 def create_task(params):
     """
@@ -179,6 +152,10 @@ def create_task(params):
     """
     params['uuid'] = get_uuid()
     params['tasktype'] = 'diseasescope_ontology'
+    params['message'] = ''
+    params['progress'] = 0
+    params['wallTime'] = 0
+    params['submitTime'] = milliseconds_since_epoch(datetime.utcnow())
     taskpath = os.path.join(get_submit_dir(), str(params[REMOTEIP_PARAM]),
                             str(params['uuid']))
     try:
@@ -187,13 +164,13 @@ def create_task(params):
     finally:
         os.umask(original_umask)
 
-    tmp_task_json = TASK_JSON + '.tmp'
+    tmp_task_json = dao.TASK_JSON + '.tmp'
     taskfilename = os.path.join(taskpath, tmp_task_json)
     with open(taskfilename, 'w') as f:
         json.dump(params, f)
         f.flush()
     os.chmod(taskfilename, mode=0o775)
-    shutil.move(taskfilename, os.path.join(taskpath, TASK_JSON))
+    shutil.move(taskfilename, os.path.join(taskpath, dao.TASK_JSON))
     return params['uuid']
 
 
@@ -206,7 +183,7 @@ def log_task_json_file(taskpath):
     if taskpath is None:
         return None
 
-    tmp_task_json = TASK_JSON
+    tmp_task_json = dao.TASK_JSON
     taskfilename = os.path.join(taskpath, tmp_task_json)
 
     if not os.path.isfile(taskfilename):
@@ -255,35 +232,6 @@ def get_task(uuidstr, iphintlist=None, basedir=None):
             if os.path.isdir(taskpath):
                 return taskpath
     return None
-
-
-def wait_for_task(uuidstr, hintlist=None):
-    """
-    Waits for task to appear in done directory
-    :param uuidstr: uuid of task
-    :param hintlist: list of ip addresses to search under
-    :return: string containing full path to task or None if not found
-    """
-    if uuidstr is None:
-        app.logger.error('uuid is None')
-        return None
-
-    counter = 0
-    taskpath = None
-    done_dir = get_done_dir()
-    while counter < app.config[WAIT_COUNT_KEY]:
-        taskpath = get_task(uuidstr, iphintlist=hintlist,
-                            basedir=done_dir)
-        if taskpath is not None:
-            break
-        app.logger.debug('Sleeping while waiting for ' + uuidstr)
-        time.sleep(app.config[SLEEP_TIME_KEY])
-        counter = counter + 1
-
-    if taskpath is None:
-        app.logger.info('Wait time exceeded while looking for: ' + uuidstr)
-
-    return taskpath
 
 
 ERROR_RESP = api.model('ErrorResponseSchema', {
@@ -350,22 +298,22 @@ class RunDiseaseScope(Resource):
     })
 
     resource_fields = api.model('Query', {
-        DOID_PARAM: fields.Integer(description='Disease ID as a number',
+        dao.DOID_PARAM: fields.Integer(description='Disease ID as a number',
                                    example=1816, required=True),
-        TISSUE_PARAM: fields.List(fields.String(description='Tissue')),
-        NDEXNAME_PARAM: fields.String('DiseaseScopeOntology',
+        dao.TISSUE_PARAM: fields.List(fields.String(description='Tissue')),
+        dao.NDEXNAME_PARAM: fields.String('DiseaseScopeOntology',
                                       description='Name to use for network '
                                                   'stored in NDEx'),
-        NDEXSERVER_PARAM: fields.String('test.ndexbio.org',
+        dao.NDEXSERVER_PARAM: fields.String('test.ndexbio.org',
                                         description='NDEx server to use',
                                         example='test.ndexbio.org'),
-        NDEXUSER_PARAM: fields.String('diseasescope_anon',
+        dao.NDEXUSER_PARAM: fields.String('diseasescope_anon',
                                       description='NDEx username',
                                       example='diseasescop_anon'),
-        NDEXPASS_PARAM: fields.String('diseasescope_anon',
+        dao.NDEXPASS_PARAM: fields.String('diseasescope_anon',
                                       description='NDEx password',
                                       example='diseasescope_anon'),
-        HIVIEWURL_PARAM: fields.String('http://hiview-test.ucsd.edu',
+        dao.HIVIEWURL_PARAM: fields.String('http://hiview-test.ucsd.edu',
                                        description='HiView server to use',
                                        example='http://hiview-test.ucsd.edu'),
     })
@@ -392,6 +340,20 @@ class RunDiseaseScope(Resource):
 
         try:
             thereq = request.json
+            if thereq is None:
+                er = ErrorResponse()
+                er.message = 'Invalid parameters'
+                er.description = 'Expected json in body of request, ' \
+                                 'but none found'
+                return marshal(er, ERROR_RESP), 400
+
+            if dao.DOID_PARAM not in thereq:
+                er = ErrorResponse()
+                er.message = 'Invalid parameters'
+                er.description = dao.DOID_PARAM + ' parameter missing in ' \
+                                              'json of request'
+                return marshal(er, ERROR_RESP), 400
+
             thereq['remoteip'] = request.remote_addr
             res = create_task(thereq)
 
@@ -400,14 +362,21 @@ class RunDiseaseScope(Resource):
             resp.status_code = 202
             task = TaskResponse()
             task.id = res
-            return marshal(task, RunDiseaseScope.taskres_obj), 202,\
-                   {LOCATION: res}
+            return (marshal(task, RunDiseaseScope.taskres_obj), 202,
+                    {LOCATION: res})
         except OSError as ea:
-            app.logger.exception('Error creating task due to Exception ' +
+            app.logger.exception('Error creating task due to OSError ' +
                                  str(ea))
             er = ErrorResponse()
-            er.message = 'Error creating task due to Exception'
+            er.message = 'Error creating task due to OSError'
             er.description = str(ea)
+            return marshal(er, ERROR_RESP), 500
+        except Exception as ex:
+            app.logger.exception('Error creating task due to Exception ' +
+                                 str(ex))
+            er = ErrorResponse()
+            er.message = 'Error creating task due to Exception'
+            er.description = str(ex)
             return marshal(er, ERROR_RESP), 500
 
 
@@ -416,12 +385,12 @@ class GetQueryResult(Resource):
     """More class doc here"""
 
     param_respobj = api.model('ParametersSchema', {
-        DOID_PARAM: fields.Integer(description='Disease ID (DOID) http://www.obofoundry.org/ontology/doid.html',
+        dao.DOID_PARAM: fields.Integer(description='Disease ID (DOID) http://www.obofoundry.org/ontology/doid.html',
                                    example=1816),
-        NDEXUSER_PARAM: fields.String('NDEx username for storing ontology network', example='diseasescope_anon'),
-        NDEXPASS_PARAM: fields.String('NDEx password for storing ontology network', example='diseasescope_anonpass'),
-        NDEXSERVER_PARAM: fields.String('NDEx server for storing ontology network', example='public.ndexbio.org'),
-        NDEXNAME_PARAM: fields.String('Name to use for network stored in NDEx', example='DiseaseScope Ontology')
+        dao.NDEXUSER_PARAM: fields.String('NDEx username for storing ontology network', example='diseasescope_anon'),
+        dao.NDEXPASS_PARAM: fields.String('NDEx password for storing ontology network', example='diseasescope_anonpass'),
+        dao.NDEXSERVER_PARAM: fields.String('NDEx server for storing ontology network', example='public.ndexbio.org'),
+        dao.NDEXNAME_PARAM: fields.String('Name to use for network stored in NDEx', example='DiseaseScope Ontology')
     })
 
     resultobj = api.model('ResultSchema', {
@@ -439,9 +408,11 @@ class GetQueryResult(Resource):
                                    example=100),
         'wallTime': fields.Integer(description='Time in milliseconds query took to run',
                                    example=341),
+        'submitTime': fields.Integer(description='Submit time in milliseconds since epoch',
+                                     example=1560806575),
         'status': fields.String(description='One of the following <' +
-                                            ' | '.join(STATUS_LIST) + '>',
-                                example=DONE_STATUS)
+                                            ' | '.join(dao.STATUS_LIST) + '>',
+                                example=dao.DONE_STATUS)
     })
 
     @api.response(200, 'Successful response from server', completeresultobj)
@@ -456,34 +427,25 @@ class GetQueryResult(Resource):
 
         taskpath = get_task(cleanid, basedir=get_submit_dir())
 
-        if taskpath is not None:
-            resp = jsonify({STATUS_RESULT_KEY: SUBMITTED_STATUS,
-                            PARAMETERS_KEY: self._get_task_parameters(taskpath)})
-            resp.status_code = 200
-            return resp
-
-        taskpath = get_task(cleanid, basedir=get_processing_dir())
-
-        if taskpath is not None:
-            resp = jsonify({STATUS_RESULT_KEY: PROCESSING_STATUS,
-                            PARAMETERS_KEY: self._get_task_parameters(taskpath)})
-            resp.status_code = 200
-            return resp
-
-        taskpath = get_task(cleanid, basedir=get_done_dir())
+        if taskpath is None:
+            taskpath = get_task(cleanid, basedir=get_processing_dir())
 
         if taskpath is None:
-            resp = jsonify({STATUS_RESULT_KEY: NOTFOUND_STATUS,
-                            PARAMETERS_KEY: None})
+            taskpath = get_task(cleanid, basedir=get_done_dir())
+
+        if taskpath is None:
+            resp = flask.make_response()
             resp.status_code = 410
             return resp
 
-        result = os.path.join(taskpath, RESULT)
+        result = os.path.join(taskpath, dao.RESULT)
         if not os.path.isfile(result):
-            er = ErrorResponse()
-            er.message = 'No result found'
-            er.description = self._get_task_parameters(taskpath)
-            return marshal(er, ERROR_RESP), 500
+            result = os.path.join(taskpath, dao.TASK_JSON)
+            if not os.path.isfile(result):
+                er = ErrorResponse()
+                er.message = 'No ' + dao.TASK_JSON + ' file found'
+                er.description = self._get_task_parameters(taskpath)
+                return marshal(er, ERROR_RESP), 500
 
         log_task_json_file(taskpath)
         app.logger.info('Result file is ' + str(os.path.getsize(result)) +
@@ -492,9 +454,7 @@ class GetQueryResult(Resource):
         with open(result, 'r') as f:
             data = json.load(f)
 
-        return jsonify({STATUS_RESULT_KEY: DONE_STATUS,
-                        RESULT_KEY: data,
-                        PARAMETERS_KEY: self._get_task_parameters(taskpath)})
+        return jsonify(data)
 
     def _get_task_parameters(self, taskpath):
         """
@@ -506,7 +466,7 @@ class GetQueryResult(Resource):
         """
         taskparams = None
         try:
-            taskjsonfile = os.path.join(taskpath, TASK_JSON)
+            taskjsonfile = os.path.join(taskpath, dao.TASK_JSON)
 
             if os.path.isfile(taskjsonfile):
                 with open(taskjsonfile, 'r') as f:
