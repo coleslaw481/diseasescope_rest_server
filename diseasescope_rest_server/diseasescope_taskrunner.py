@@ -67,6 +67,7 @@ class Diseasescopetaskrunner(object):
         # ADD PROCESSING LOGIC HERE
         emsg = None
         taskdict = task.get_taskdict()
+        taskdict['message'] = 'WARNING This is a fake result'
         taskdict['progress'] = 100
         taskdict['result'] = {
             "hiviewurl": "http://hiview-test.ucsd.edu/2ee22eb8-8ec4-11e9-9bb5-0660b7976219?type=test&server=http://dev2.ndexbio.org",
