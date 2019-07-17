@@ -13,6 +13,8 @@ import diseasescope_rest_server
 from diseasescope_rest_server import dao
 from diseasescope_rest_server.dao import FileBasedSubmittedTaskFactory
 from diseasescope_rest_server.dao import DeletedFileBasedTaskFactory
+from diseasescope.diseasescope import DiseaseScope
+
 
 
 logger = logging.getLogger('diseasescopetaskrunner')
@@ -63,15 +65,35 @@ class Diseasescopetaskrunner(object):
         """
         logger.info('Task dir: ' + task.get_taskdir())
         task.move_task(dao.PROCESSING_STATUS)
-
+        taskdict = task.get_taskdict()
+        scope = (
+            DiseaseScope(taskdict['doid'], convert_doid=True)
+                .get_disease_genes(method="biothings")
+                .get_disease_tissues(n=10)
+                .expand_gene_set(method='biggim')
+                .get_network(method="biggim")
+                .convert_edge_table_names(
+                ["Gene1", "Gene2"],
+                'entrezgene',
+                "symbol",
+                keep=False
+            )
+                .infer_hierarchical_model(
+                edge_attr="mean",
+                method='clixo-api',
+                method_kwargs={
+                    'alpha': 0.01,
+                    'beta': 0.5,
+                }
+            )
+        )
         # ADD PROCESSING LOGIC HERE
         emsg = None
         taskdict = task.get_taskdict()
-        taskdict['message'] = 'WARNING This is a fake result'
         taskdict['progress'] = 100
         taskdict['result'] = {
-            "hiviewurl": "http://hiview-test.ucsd.edu/2ee22eb8-8ec4-11e9-9bb5-0660b7976219?type=test&server=http://dev2.ndexbio.org",
-            "ndexurl": "http://dev2.ndexbio.org/#/network/2ee22eb8-8ec4-11e9-9bb5-0660b7976219"}
+            "hiviewurl": score.hiview_url,
+            "ndexurl": "todo"}
 
         if emsg is not None:
             logger.error('Task had error: ' + emsg)

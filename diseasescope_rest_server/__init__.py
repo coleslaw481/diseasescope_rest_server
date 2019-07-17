@@ -299,7 +299,7 @@ class RunDiseaseScope(Resource):
 
     resource_fields = api.model('Query', {
         dao.DOID_PARAM: fields.Integer(description='Disease ID as a number',
-                                   example=1816, required=True),
+                                   example=2841, required=True),
         dao.TISSUE_PARAM: fields.List(fields.String(description='Tissue')),
         dao.NDEXNAME_PARAM: fields.String('DiseaseScopeOntology',
                                       description='Name to use for network '
