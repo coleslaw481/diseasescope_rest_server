@@ -40,6 +40,10 @@ def _parse_arguments(desc, args):
                              'delete requests')
     parser.add_argument('--nodaemon', default=False, action='store_true',
                         help='If set program will NOT run in daemon mode')
+    parser.add_argument('--doidmappingfile', required=True,
+                        help='DOID mapping file')
+    parser.add_argument('--genesetfile', required=True,
+                        help='Gene set file')
     parser.add_argument('--logconfig', help='Logging configuration file')
     parser.add_argument('--version', action='version',
                         version=('%(prog)s ' + diseasescope_rest_server.__version__))
@@ -52,10 +56,14 @@ class Diseasescopetaskrunner(object):
     """
     def __init__(self, wait_time=30,
                  taskfactory=None,
-                 deletetaskfactory=None):
+                 deletetaskfactory=None,
+                 doidfile=None,
+                 genesetfile=None):
         self._taskfactory = taskfactory
         self._wait_time = wait_time
         self._deletetaskfactory = deletetaskfactory
+        self._doidfile = doidfile
+        self._geneset_file = genesetfile
 
     def _process_task(self, task, delete_temp_files=True):
         """
@@ -67,7 +75,9 @@ class Diseasescopetaskrunner(object):
         task.move_task(dao.PROCESSING_STATUS)
         taskdict = task.get_taskdict()
         scope = (
-            DiseaseScope(taskdict['doid'], convert_doid=True)
+            DiseaseScope(taskdict['doid'], convert_doid=True,
+                         doid_mapping_file=self._doidfile,
+                         geneset_file=self._geneset_file)
                 .get_disease_genes(method="biothings")
                 .get_disease_tissues(n=10)
                 .expand_gene_set(method='biggim')
@@ -81,19 +91,21 @@ class Diseasescopetaskrunner(object):
                 .infer_hierarchical_model(
                 edge_attr="mean",
                 method='clixo-api',
+                temp_path=task.get_taskdir(),
                 method_kwargs={
                     'alpha': 0.01,
                     'beta': 0.5,
                 }
             )
         )
+        logger.info('Task finished')
         # ADD PROCESSING LOGIC HERE
         emsg = None
         taskdict = task.get_taskdict()
         taskdict['progress'] = 100
         taskdict['result'] = {
-            "hiviewurl": score.hiview_url,
-            "ndexurl": "todo"}
+            "hiviewurl": scope.hiview_url,
+            "ndexurl": ""}
 
         if emsg is not None:
             logger.error('Task had error: ' + emsg)
@@ -185,7 +197,9 @@ def run(theargs, keep_looping=lambda: True):
             dfac = DeletedFileBasedTaskFactory(ab_tdir)
         runner = Diseasescopetaskrunner(taskfactory=tfac,
                                 wait_time=theargs.wait_time,
-                                deletetaskfactory=dfac)
+                                deletetaskfactory=dfac,
+                                doidfile=theargs.doidmappingfile,
+                                genesetfile=theargs.genesetfile)
 
         runner.run_tasks(keep_looping=keep_looping)
     except Exception:
